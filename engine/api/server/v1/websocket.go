@@ -63,16 +63,42 @@ func (v *V1Handlers) WSLogsHandler(w http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 
-	go writeLoop(conn, sess.PubSub().Subscribe())
+	ps := sess.PubSub()
+	ch := ps.Subscribe()
+	go func() {
+		defer func() { _ = conn.Close() }()
+		defer ps.Unsubscribe(ch)
+
+		writeLoop(conn, ch, readLoop(conn))
+	}()
 	v.log.Info("connected to session log stream")
 }
 
-func writeLoop(conn *websocket.Conn, ch <-chan *string) {
+// readLoop processes control frames from the client, such as pongs and the close
+// message, and returns a channel that is closed once the client is gone.
+func readLoop(conn *websocket.Conn) <-chan struct{} {
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+
+		for {
+			if _, _, err := conn.NextReader(); err != nil {
+				return
+			}
+		}
+	}()
+	return done
+}
+
+func writeLoop(conn *websocket.Conn, ch <-chan *string, done <-chan struct{}) {
 	ping := time.NewTicker(30 * time.Second)
 	defer ping.Stop()
 
 	for {
 		select {
+		case <-done:
+			return
 		case msg, ok := <-ch:
 			_ = conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 			if !ok {

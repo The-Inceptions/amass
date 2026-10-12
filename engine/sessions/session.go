@@ -50,6 +50,7 @@ type Session struct {
 	tmpdir       string
 	stats        *et.SessionStats
 	done         chan struct{}
+	killOnce     sync.Once
 	finished     bool
 	numOfSess    int
 	netSemaphore *sessSemaphore
@@ -191,16 +192,13 @@ func (s *Session) Done() bool {
 }
 
 func (s *Session) Kill() {
-	select {
-	case <-s.done:
-		return
-	default:
-	}
-	close(s.done)
+	s.killOnce.Do(func() {
+		close(s.done)
 
-	s.cancel()
-	s.finished = true
-	s.clients.CloseIdleConnections()
+		s.cancel()
+		s.finished = true
+		s.clients.CloseIdleConnections()
+	})
 }
 
 func (s *Session) setupDB() error {
