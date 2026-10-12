@@ -91,10 +91,17 @@ func (b *BacklogDB) EnqueueDone(ctx context.Context, atype oam.AssetType, entity
 	return err
 }
 
+// nominalLeaseTTL is the lease length recorded when ClaimNext is called with a ttl <= 0.
+// Those leases never expire, so the value is informational only.
+const nominalLeaseTTL = 30 * time.Second
+
 // ClaimNext leases up to n eligible items for an asset type.
 // Eligibility:
 // - state=queued
-// - OR state=leased AND lease_until <= now (expired lease)
+// - OR, only when ttl > 0, state=leased AND lease_until <= now (expired lease)
+//
+// A ttl <= 0 means leases never expire: an item stays leased until it is acked or
+// released, and lease_until is set nominalLeaseTTL ahead for reference only.
 //
 // The claim is atomic: it runs in a single transaction with BEGIN IMMEDIATE
 // and updates selected rows to (state=leased, lease_owner=owner, lease_until=now+ttl).
@@ -111,11 +118,12 @@ func (b *BacklogDB) ClaimNext(ctx context.Context, atype oam.AssetType, owner st
 
 	now := nowUnix()
 	key := string(atype)
-	leaseUntil := now + int64(ttl.Seconds())
-	if ttl <= 0 {
-		ttl := 30 * time.Second
-		leaseUntil = now + int64(ttl.Seconds())
+	expiring := ttl > 0
+	leaseFor := ttl
+	if !expiring {
+		leaseFor = nominalLeaseTTL
 	}
+	leaseUntil := now + int64(leaseFor.Seconds())
 
 	// IMPORTANT: Use a single connection + explicit BEGIN IMMEDIATE to avoid
 	// "cannot start a transaction within a transaction" and to make claim atomic.
@@ -138,7 +146,7 @@ func (b *BacklogDB) ClaimNext(ctx context.Context, atype oam.AssetType, owner st
 	}()
 
 	var rows *sql.Rows
-	if ttl <= 0 {
+	if !expiring {
 		rows, err = conn.QueryContext(ctx, `
 			SELECT id, entity_id
 			FROM backlog_items
@@ -289,8 +297,10 @@ func (b *BacklogDB) Release(ctx context.Context, entityID string, owner string) 
 	return err
 }
 
-// RequeueExpired is optional; ClaimNext already treats expired leases as eligible.
-// This can be useful if you want to periodically normalize state.
+// RequeueExpired moves leased items whose lease has passed back to the queued state.
+// It is optional when items are claimed with a ttl > 0, since ClaimNext already treats
+// expired leases as eligible. Don't use it on a backlog claimed with a ttl <= 0: those
+// leases never expire, so it would requeue items that are still being processed.
 func (b *BacklogDB) RequeueExpired(ctx context.Context) error {
 	b.Lock()
 	defer b.Unlock()

@@ -113,6 +113,8 @@ func CreateSession(mgr *manager, reg et.Registry, cfg *config.Config) (et.Sessio
 		s.Kill()
 		return nil, err
 	}
+	// Leases never expire: processing an entity can take longer than any fixed TTL,
+	// and reclaiming an expired lease would dispatch the entity a second time.
 	s.backlog.SetLeaseTTL(0)
 
 	s.log.Info("Session initialized")
