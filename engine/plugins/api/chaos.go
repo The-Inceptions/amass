@@ -116,12 +116,11 @@ func (c *chaos) query(e *et.Event, name string, keys []string) []*dbt.Entity {
 		e.Session.NetSem().Acquire()
 
 		ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
-		defer cancel()
-
 		resp, err := amasshttp.RequestWebPage(ctx, e.Session.Clients().General, &amasshttp.Request{
 			URL:    "https://dns.projectdiscovery.io/dns/" + name + "/subdomains",
 			Header: amasshttp.Header{"Authorization": []string{key}},
 		})
+		cancel()
 		e.Session.NetSem().Release()
 		if err != nil {
 			continue

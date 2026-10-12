@@ -120,11 +120,10 @@ func (vt *virusTotal) query(e *et.Event, name string, keys []string) []*dbt.Enti
 		e.Session.NetSem().Acquire()
 
 		ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
-		defer cancel()
-
 		resp, err := amasshttp.RequestWebPage(ctx, e.Session.Clients().General, &amasshttp.Request{
 			URL: "https://www.virustotal.com/vtapi/v2/domain/report?domain=" + name + "&apikey=" + key,
 		})
+		cancel()
 		e.Session.NetSem().Release()
 		if err != nil || resp.Body == "" {
 			continue

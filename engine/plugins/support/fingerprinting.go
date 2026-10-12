@@ -7,6 +7,7 @@ package support
 import (
 	"context"
 	"errors"
+	"net"
 	"strconv"
 	"strings"
 	"time"
@@ -44,38 +45,16 @@ func JARMFingerprint(sess et.Session, target oam.Asset, portrel *general.PortRel
 		sess.NetSem().Acquire()
 
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-
 		dial := amassnet.NewDialContext(5 * time.Second)
 		c, err := dial(ctx, "tcp", addr)
+		cancel()
 		sess.NetSem().Release()
 		if err != nil {
 			return "", err
 		}
-		defer func() { _ = c.Close() }()
 
-		data := jarm.BuildProbe(probe)
-		_ = c.SetWriteDeadline(time.Now().Add(5 * time.Second))
-		if _, err := c.Write(data); err != nil {
-			results = append(results, "")
-			continue
-		}
-
-		_ = c.SetReadDeadline(time.Now().Add(5 * time.Second))
-		buf := make([]byte, 1484)
-		n, err := c.Read(buf)
-		if err != nil || n == 0 {
-			results = append(results, "")
-			continue
-		}
-		data = buf[:n]
-
-		ans, err := jarm.ParseServerHello(data, probe)
-		if err != nil {
-			results = append(results, "")
-			continue
-		}
-		results = append(results, ans)
+		results = append(results, sendJARMProbe(c, probe))
+		_ = c.Close()
 	}
 
 	hash := jarm.RawHashToFuzzyHash(strings.Join(results, ","))
@@ -83,4 +62,26 @@ func JARMFingerprint(sess et.Session, target oam.Asset, portrel *general.PortRel
 		return "", errors.New("probes were not successful against the target")
 	}
 	return hash, nil
+}
+
+// sendJARMProbe sends one probe over the connection and returns the parsed server
+// hello, or an empty string when the probe fails.
+func sendJARMProbe(c net.Conn, probe jarm.JarmProbeOptions) string {
+	_ = c.SetWriteDeadline(time.Now().Add(5 * time.Second))
+	if _, err := c.Write(jarm.BuildProbe(probe)); err != nil {
+		return ""
+	}
+
+	_ = c.SetReadDeadline(time.Now().Add(5 * time.Second))
+	buf := make([]byte, 1484)
+	n, err := c.Read(buf)
+	if err != nil || n == 0 {
+		return ""
+	}
+
+	ans, err := jarm.ParseServerHello(buf[:n], probe)
+	if err != nil {
+		return ""
+	}
+	return ans
 }

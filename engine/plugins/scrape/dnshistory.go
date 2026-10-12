@@ -108,10 +108,9 @@ func (d *dnsHistory) query(e *et.Event, name string) []*dbt.Entity {
 		e.Session.NetSem().Acquire()
 
 		ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
-		defer cancel()
-
 		resp, err := amasshttp.RequestWebPage(ctx,
 			e.Session.Clients().General, &amasshttp.Request{URL: fmt.Sprintf(d.fmtstr, i, name)})
+		cancel()
 		e.Session.NetSem().Release()
 		if err != nil || resp.Body == "" {
 			break
