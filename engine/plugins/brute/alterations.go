@@ -7,6 +7,7 @@ package brute
 import (
 	"errors"
 	"log/slog"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -295,9 +296,11 @@ func fuzzyLabelSearches(name string, distance int, chars string) []string {
 	return guesses
 }
 
+// The edit functions below build every guess in a new slice, since writing into the
+// label's own rune slice would corrupt the guesses that follow.
+
 func additions(set []string, chars string) []string {
 	ldh := []rune(chars)
-	ldhLen := len(ldh)
 
 	var guesses []string
 	for _, str := range set {
@@ -305,12 +308,8 @@ func additions(set []string, chars string) []string {
 		rlen := len(rstr)
 
 		for i := 0; i <= rlen; i++ {
-			for j := range ldhLen {
-				temp := append(rstr, ldh[0])
-
-				copy(temp[i+1:], temp[i:])
-				temp[i] = ldh[j]
-				guesses = append(guesses, string(temp))
+			for _, c := range ldh {
+				guesses = append(guesses, string(slices.Concat(rstr[:i], []rune{c}, rstr[i:])))
 			}
 		}
 	}
@@ -325,7 +324,7 @@ func deletions(set []string) []string {
 		rlen := len(rstr)
 
 		for i := range rlen {
-			if del := string(append(rstr[:i], rstr[i+1:]...)); del != "" {
+			if del := string(slices.Concat(rstr[:i], rstr[i+1:])); del != "" {
 				guesses = append(guesses, del)
 			}
 		}
@@ -335,7 +334,6 @@ func deletions(set []string) []string {
 
 func substitutions(set []string, chars string) []string {
 	ldh := []rune(chars)
-	ldhLen := len(ldh)
 
 	var guesses []string
 	for _, str := range set {
@@ -343,10 +341,10 @@ func substitutions(set []string, chars string) []string {
 		rlen := len(rstr)
 
 		for i := range rlen {
-			temp := rstr
+			temp := slices.Clone(rstr)
 
-			for j := range ldhLen {
-				temp[i] = ldh[j]
+			for _, c := range ldh {
+				temp[i] = c
 				guesses = append(guesses, string(temp))
 			}
 		}
