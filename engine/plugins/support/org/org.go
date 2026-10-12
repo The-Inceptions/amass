@@ -33,6 +33,10 @@ func CreateOrgAsset(sess et.Session, obj *dbt.Entity, rel oam.Relation, o *oamor
 		return nil, errors.New("missing the source")
 	}
 
+	// work on a copy, since the fields below are normalized and the caller's struct may be shared
+	oc := *o
+	o = &oc
+
 	orgent, err := FindOrgByNameClaim(sess, o.Name, src)
 	if err != nil && o.LegalName != "" {
 		orgent, _ = FindOrgByLegalNameClaim(sess, o.LegalName, src)

@@ -109,11 +109,10 @@ func (ce *companyEnrich) query(e *et.Event, ident *dbt.Entity, apikey []string) 
 		e.Session.NetSem().Acquire()
 
 		ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
-		defer cancel()
-
 		u := fmt.Sprintf("https://data.api.aviato.co/company/enrich?id=%s", url.QueryEscape(oamid.ID))
 		resp, err := amasshttp.RequestWebPage(ctx,
 			e.Session.Clients().General, &amasshttp.Request{URL: u, Header: headers})
+		cancel()
 		e.Session.NetSem().Release()
 		if err != nil {
 			msg := fmt.Sprintf("failed to obtain the company enrich result for %s: %s", oamid.ID, err)

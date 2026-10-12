@@ -69,6 +69,11 @@ func (j *jarmPlugin) check(e *et.Event) error {
 		return errors.New("failed to extract the Service asset")
 	}
 
+	// JARM fingerprinting sends TLS handshakes to the target
+	if !e.Session.Config().Active {
+		return nil
+	}
+
 	since, err := support.TTLStartTime(e.Session.Config(), string(oam.Service), string(oam.Service), j.name)
 	if err != nil {
 		return err
@@ -125,7 +130,7 @@ func (j *jarmPlugin) query(e *et.Event, since time.Time) {
 				case *oamdns.FQDN:
 					if portrel.Protocol == "TCP" {
 						t := &fingerprint{
-							asset: e.Entity,
+							asset: a,
 							port:  edge,
 						}
 						targets = append([]*fingerprint{t}, targets...)
@@ -133,7 +138,7 @@ func (j *jarmPlugin) query(e *et.Event, since time.Time) {
 				case *oamnet.IPAddress:
 					if portrel.Protocol == "TCP" {
 						targets = append(targets, &fingerprint{
-							asset: e.Entity,
+							asset: a,
 							port:  edge,
 						})
 					}

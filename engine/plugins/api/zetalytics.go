@@ -123,9 +123,8 @@ func (z *zetalytics) query(e *et.Event, name string, keys []string) []*dbt.Entit
 		e.Session.NetSem().Acquire()
 
 		ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
-		defer cancel()
-
 		resp, err := amasshttp.RequestWebPage(ctx, e.Session.Clients().General, &amasshttp.Request{URL: url})
+		cancel()
 		e.Session.NetSem().Release()
 		if err != nil || resp.Body == "" {
 			continue

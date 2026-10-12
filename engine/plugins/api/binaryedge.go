@@ -121,12 +121,11 @@ loop:
 			e.Session.NetSem().Acquire()
 
 			ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
-			defer cancel()
-
 			resp, err := amasshttp.RequestWebPage(ctx, e.Session.Clients().General, &amasshttp.Request{
 				Header: amasshttp.Header{"X-KEY": []string{key}},
 				URL:    "https://api.binaryedge.io/v2/query/domains/subdomain/" + name + "?page=" + strconv.Itoa(pagenum),
 			})
+			cancel()
 			e.Session.NetSem().Release()
 			if err != nil || resp.Body == "" {
 				break

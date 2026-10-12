@@ -117,12 +117,11 @@ func (st *securityTrails) query(e *et.Event, name string, keys []string) []*dbt.
 		e.Session.NetSem().Acquire()
 
 		ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
-		defer cancel()
-
 		resp, err := amasshttp.RequestWebPage(ctx, e.Session.Clients().General, &amasshttp.Request{
 			URL:    "https://api.securitytrails.com/v1/domain/" + name + "/subdomains",
 			Header: amasshttp.Header{"APIKEY": []string{key}},
 		})
+		cancel()
 		e.Session.NetSem().Release()
 		if err != nil || resp.Body == "" {
 			continue

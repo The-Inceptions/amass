@@ -143,7 +143,7 @@ func (h *horRegRec) processDomainRecord(e *et.Event, orgs []*dbt.Entity, locs []
 		// get the registered domain FQDN entity
 		if fqdn, err := h.plugin.getRegisteredDomainEntity(e.Session, e.Entity); err == nil && fqdn != nil {
 			// add the FQDN to the session scope and review it
-			h.plugin.enqueueIfOutOfScope(e.Session, e.Entity)
+			h.plugin.enqueueIfOutOfScope(e.Session, fqdn)
 		}
 		for _, o := range orgs {
 			h.plugin.enqueueIfOutOfScope(e.Session, o)

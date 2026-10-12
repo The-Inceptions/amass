@@ -121,14 +121,13 @@ func (cs *companySearch) query(e *et.Event, orgent *dbt.Entity, apikey []string)
 		e.Session.NetSem().Acquire()
 
 		ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
-		defer cancel()
-
 		resp, err := amasshttp.RequestWebPage(ctx, e.Session.Clients().General, &amasshttp.Request{
 			URL:    "https://data.api.aviato.co/company/search",
 			Method: "POST",
 			Header: headers,
 			Body:   `{"dsl": ` + string(dslJSON) + `}`,
 		})
+		cancel()
 		e.Session.NetSem().Release()
 		if err == nil {
 			if resp.StatusCode == 200 {

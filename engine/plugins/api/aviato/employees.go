@@ -137,27 +137,27 @@ loop:
 			e.Session.NetSem().Acquire()
 
 			ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
-			defer cancel()
-
 			u := fmt.Sprintf("https://data.api.aviato.co/company/%s/employees?perPage=%d&page=%d", url.QueryEscape(oamid.ID), perPage, page)
 			resp, err := amasshttp.RequestWebPage(ctx, e.Session.Clients().General, &amasshttp.Request{URL: u, Header: headers})
+			cancel()
 			e.Session.NetSem().Release()
+			// a failed request moves on to the next key, starting from the same page
 			if err != nil {
 				msg := fmt.Sprintf("failed to obtain the employees for %s: %s", oamid.ID, err)
 				e.Session.Log().Error(msg, slog.Group("plugin", "name", ae.plugin.name, "handler", ae.name))
-				continue
+				break
 			} else if resp.StatusCode != 200 {
 				msg := fmt.Sprintf("failed to obtain the employees for %s: %s", oamid.ID, resp.Status)
 				e.Session.Log().Error(msg, slog.Group("plugin", "name", ae.plugin.name, "handler", ae.name))
-				continue
+				break
 			} else if resp.Body == "" {
 				msg := fmt.Sprintf("failed to obtain the employees for %s: empty body", oamid.ID)
 				e.Session.Log().Error(msg, slog.Group("plugin", "name", ae.plugin.name, "handler", ae.name))
-				continue
+				break
 			} else if strings.Contains(resp.Body, "error") {
 				msg := fmt.Sprintf("failed to obtain the employees for %s: %s", oamid.ID, resp.Body)
 				e.Session.Log().Error(msg, slog.Group("plugin", "name", ae.plugin.name, "handler", ae.name))
-				continue
+				break
 			}
 
 			var result employeesResult

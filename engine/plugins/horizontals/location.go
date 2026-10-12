@@ -12,9 +12,7 @@ import (
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 	oamcon "github.com/owasp-amass/open-asset-model/contact"
-	oamreg "github.com/owasp-amass/open-asset-model/registration"
 )
 
 type horLocation struct {
@@ -80,30 +78,7 @@ func (h *horLocation) processInScope(e *et.Event) {
 			}
 		}
 		// if the contact record belongs to a registration record or TLS certificate, add to the scope
-		if edges, err := e.Session.DB().IncomingEdges(ctx, from, since); err == nil {
-			for _, edge := range edges {
-				if from, err := e.Session.DB().FindEntityById(ctx, edge.FromEntity.ID); err == nil {
-					switch v := from.Asset.(type) {
-					case *oamreg.AutnumRecord:
-						if !h.plugin.isEntityInScope(e.Session, from) {
-							if as := h.plugin.addASNetblocksToScope(e.Session, v.Number); as != nil {
-								h.plugin.addToScopeAndEnqueue(e.Session, as)
-							}
-						}
-					case *oamreg.DomainRecord:
-						if fqdn, err := h.plugin.getRegisteredDomainEntity(e.Session, from); err == nil && fqdn != nil {
-							h.plugin.enqueueIfOutOfScope(e.Session, fqdn)
-						}
-					case *oamreg.IPNetRecord:
-						if nb, err := h.plugin.getRegisteredNetblockEntity(e.Session, from); err == nil && nb != nil {
-							h.plugin.enqueueIfOutOfScope(e.Session, nb)
-						}
-					case *oamcert.TLSCertificate:
-						h.plugin.enqueueIfOutOfScope(e.Session, from)
-					}
-				}
-			}
-		}
+		h.plugin.expandScopeFromContactRecordOwners(ctx, e.Session, from, since)
 	}
 }
 

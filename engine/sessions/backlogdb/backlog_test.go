@@ -263,6 +263,35 @@ func TestClaimNextReclaimsExpiredLease(t *testing.T) {
 	assert.Equal(t, eid, claims2[0].EntityID)
 }
 
+func TestClaimNextWithoutTTLNeverReclaims(t *testing.T) {
+	db, _ := openTestBacklog(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	eid := "entity-no-ttl"
+	require.NoError(t, db.Enqueue(ctx, oam.FQDN, eid))
+
+	claims, err := db.ClaimNext(ctx, oam.FQDN, "ownerA", 1, 0)
+	require.NoError(t, err)
+	require.Len(t, claims, 1)
+
+	// Push the recorded lease into the past
+	_, err = db.db.ExecContext(ctx, `UPDATE backlog_items SET lease_until = 0`)
+	require.NoError(t, err)
+
+	// Claims without a TTL must not take over the lease
+	claims2, err := db.ClaimNext(ctx, oam.FQDN, "ownerB", 1, 0)
+	require.NoError(t, err)
+	assert.Empty(t, claims2)
+
+	// Claims with a TTL still treat it as expired
+	claims3, err := db.ClaimNext(ctx, oam.FQDN, "ownerB", 1, 60*time.Second)
+	require.NoError(t, err)
+	require.Len(t, claims3, 1)
+	assert.Equal(t, eid, claims3[0].EntityID)
+}
+
 func TestRequeueExpiredNormalizesState(t *testing.T) {
 	db, _ := openTestBacklog(t)
 

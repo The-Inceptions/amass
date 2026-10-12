@@ -77,7 +77,7 @@ func (rd *rdapPlugin) Start(r et.Registry) error {
 	c.Dir = filepath.Join(outdir, ".openrdap")
 
 	bs := &bootstrap.Client{Cache: c}
-	tlsConfig := &tls.Config{InsecureSkipVerify: true}
+	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12}
 	transport := &http.Transport{
 		Proxy:           http.ProxyFromEnvironment,
 		TLSClientConfig: tlsConfig,

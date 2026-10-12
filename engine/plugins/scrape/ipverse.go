@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
@@ -22,12 +23,13 @@ import (
 )
 
 type ipverse struct {
-	name   string
-	fmtstr string
-	log    *slog.Logger
-	rlimit *rate.Limiter
-	source *et.Source
-	asns   map[int]struct{}
+	name    string
+	fmtstr  string
+	log     *slog.Logger
+	rlimit  *rate.Limiter
+	source  *et.Source
+	asnLock sync.Mutex
+	asns    map[int]struct{}
 }
 
 func NewIPVerse() et.Plugin {
@@ -79,20 +81,40 @@ func (v *ipverse) check(e *et.Event) error {
 		return errors.New("failed to extract the AutonomousSystem asset")
 	}
 
-	if _, found := v.asns[as.Number]; found {
+	if !v.reserve(as.Number) {
 		return nil
 	}
 
 	rec := v.query(e.Session, e.Entity)
 	if rec == nil {
+		v.release(as.Number)
 		return nil
 	}
-	v.asns[as.Number] = struct{}{}
 
 	for _, cidr := range append(rec.CIDRs.IPv4, rec.CIDRs.IPv6...) {
 		_ = support.AddNetblock(e.Session, cidr, as.Number, v.source)
 	}
 	return nil
+}
+
+// reserve claims the ASN for a lookup and reports whether it was still unclaimed.
+func (v *ipverse) reserve(asn int) bool {
+	v.asnLock.Lock()
+	defer v.asnLock.Unlock()
+
+	if _, found := v.asns[asn]; found {
+		return false
+	}
+	v.asns[asn] = struct{}{}
+	return true
+}
+
+// release gives up the claim on an ASN after a failed lookup, so a later event can retry it.
+func (v *ipverse) release(asn int) {
+	v.asnLock.Lock()
+	defer v.asnLock.Unlock()
+
+	delete(v.asns, asn)
 }
 
 type record struct {

@@ -50,6 +50,7 @@ type Session struct {
 	tmpdir       string
 	stats        *et.SessionStats
 	done         chan struct{}
+	killOnce     sync.Once
 	finished     bool
 	numOfSess    int
 	netSemaphore *sessSemaphore
@@ -112,6 +113,8 @@ func CreateSession(mgr *manager, reg et.Registry, cfg *config.Config) (et.Sessio
 		s.Kill()
 		return nil, err
 	}
+	// Leases never expire: processing an entity can take longer than any fixed TTL,
+	// and reclaiming an expired lease would dispatch the entity a second time.
 	s.backlog.SetLeaseTTL(0)
 
 	s.log.Info("Session initialized")
@@ -191,16 +194,13 @@ func (s *Session) Done() bool {
 }
 
 func (s *Session) Kill() {
-	select {
-	case <-s.done:
-		return
-	default:
-	}
-	close(s.done)
+	s.killOnce.Do(func() {
+		close(s.done)
 
-	s.cancel()
-	s.finished = true
-	s.clients.CloseIdleConnections()
+		s.cancel()
+		s.finished = true
+		s.clients.CloseIdleConnections()
+	})
 }
 
 func (s *Session) setupDB() error {
@@ -329,27 +329,50 @@ func (s *Session) calculateStats() {
 	ss.Unlock()
 }
 
+// sessSemaphore limits the number of concurrent network requests made by a session.
+// The limit can be changed while the semaphore is in use, so waiters never become
+// stranded on a replaced semaphore.
 type sessSemaphore struct {
 	sync.Mutex
-	sem amassnet.Semaphore
+	cond  *sync.Cond
+	limit int
+	inUse int
 }
 
 func NewSessSemaphore(limit int) *sessSemaphore {
-	return &sessSemaphore{sem: amassnet.NewSemaphore(limit)}
+	ss := &sessSemaphore{limit: max(1, limit)}
+	ss.cond = sync.NewCond(&ss.Mutex)
+	return ss
 }
 
 func (ss *sessSemaphore) Acquire() {
 	ss.Lock()
 	defer ss.Unlock()
 
-	ss.sem.Acquire()
+	for ss.inUse >= ss.limit {
+		ss.cond.Wait()
+	}
+	ss.inUse++
 }
 
 func (ss *sessSemaphore) Release() {
 	ss.Lock()
 	defer ss.Unlock()
 
-	ss.sem.Release()
+	if ss.inUse > 0 {
+		ss.inUse--
+	}
+	ss.cond.Signal()
+}
+
+// SetLimit changes the number of concurrent holders. When the limit shrinks, current
+// holders keep their slots and new callers wait until enough of them are released.
+func (ss *sessSemaphore) SetLimit(limit int) {
+	ss.Lock()
+	defer ss.Unlock()
+
+	ss.limit = max(1, limit)
+	ss.cond.Broadcast()
 }
 
 func (s *Session) updateSessionSemaphore() {
@@ -361,33 +384,10 @@ func (s *Session) updateSessionSemaphore() {
 		case <-s.done:
 			return
 		case <-tick.C:
-			if num := s.mgr.NumOfSessions(); num != s.numOfSess {
+			if num := s.mgr.NumOfSessions(); num > 0 && num != s.numOfSess {
 				s.numOfSess = num
-				s.buildNewSessionSemaphore()
+				s.netSemaphore.SetLimit(amassnet.MaxNetworkConns / num)
 			}
 		}
 	}
-}
-
-func (s *Session) buildNewSessionSemaphore() {
-	s.netSemaphore.Lock()
-	defer s.netSemaphore.Unlock()
-
-	limit := amassnet.MaxNetworkConns / s.numOfSess
-	sem := amassnet.NewSemaphore(limit)
-loop:
-	for range limit {
-		select {
-		case s.netSemaphore.sem <- struct{}{}:
-			select {
-			case <-sem:
-			default:
-				break loop
-			}
-		default:
-			break loop
-		}
-	}
-
-	s.netSemaphore.sem = sem
 }

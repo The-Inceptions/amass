@@ -107,10 +107,9 @@ func GLEIFGetDirectChildrenRecords(ctx context.Context, id string) ([]*LEIRecord
 	for i := 1; i <= last && link != ""; i++ {
 		_ = gleifLimit.Wait(ctx)
 		wctx, cancel := context.WithTimeout(ctx, 60*time.Second)
-		defer cancel()
-
 		resp, err := amasshttp.RequestWebPage(wctx,
 			amasshttp.DefaultClient, &amasshttp.Request{URL: link})
+		cancel()
 		if err != nil || resp.StatusCode != 200 || resp.Body == "" {
 			return nil, err
 		}

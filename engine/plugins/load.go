@@ -73,6 +73,7 @@ func LoadAndStartPlugins(r et.Registry) error {
 				stopPlugins(started)
 				return err
 			}
+			started = append(started, p)
 		}
 	}
 	return nil
