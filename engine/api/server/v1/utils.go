@@ -88,7 +88,7 @@ func (v *V1Handlers) PutAsset(ctx context.Context, sess et.Session, asset oam.As
 	} else {
 		entity, err = sess.DB().CreateAsset(ctx, asset)
 		if err != nil {
-			return entity.ID, err
+			return "", err
 		}
 	}
 
