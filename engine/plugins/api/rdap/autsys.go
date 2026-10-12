@@ -129,6 +129,11 @@ func (r *autsys) store(e *et.Event, resp *rdap.Autnum, asset *dbt.Entity) *dbt.E
 
 	autasset, err := e.Session.DB().CreateAsset(ctx, autrec)
 	if err == nil && autasset != nil {
+		_, _ = e.Session.DB().CreateEntityProperty(ctx, autasset, &general.SourceProperty{
+			Source:     r.plugin.source.Name,
+			Confidence: r.plugin.source.Confidence,
+		})
+
 		if edge, err := e.Session.DB().CreateEdge(ctx, &dbt.Edge{
 			Relation:   &general.SimpleRelation{Name: "registration"},
 			FromEntity: asset,
