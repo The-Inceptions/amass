@@ -6,11 +6,8 @@ package scope
 
 import (
 	"fmt"
-	"math"
 	"strings"
 
-	"github.com/adrg/strutil"
-	"github.com/adrg/strutil/metrics"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamcon "github.com/owasp-amass/open-asset-model/contact"
 )
@@ -44,13 +41,13 @@ func (s *Scope) Locations() []*oamcon.Location {
 	return results
 }
 
-func (s *Scope) matchesLocation(loc *oamcon.Location, conf int) (oam.Asset, int) {
+// matchesLocation returns the in-scope location with the same address, ignoring case.
+// Similar addresses are deliberately not matched, for the same reason as in matchesOrg.
+func (s *Scope) matchesLocation(loc *oamcon.Location, _ int) (oam.Asset, int) {
 	if loc.BuildingNumber == "" {
 		return nil, 0
 	}
 
-	var bconf int
-	var best oam.Asset
 	for _, loc2 := range s.Locations() {
 		if loc.BuildingNumber != loc2.BuildingNumber {
 			continue
@@ -61,19 +58,6 @@ func (s *Scope) matchesLocation(loc *oamcon.Location, conf int) (oam.Asset, int)
 		if strings.EqualFold(lstr1, lstr2) {
 			return loc2, 100
 		}
-
-		swg := metrics.NewSmithWatermanGotoh()
-		swg.CaseSensitive = false
-		swg.GapPenalty = -0.1
-		swg.Substitution = metrics.MatchMismatch{
-			Match:    1,
-			Mismatch: -0.5,
-		}
-
-		if sim := strutil.Similarity(lstr1, lstr2, swg); sim >= float64(conf) && sim > float64(bconf) {
-			best = loc2
-			bconf = int(math.Round(sim))
-		}
 	}
-	return best, bconf
+	return nil, 0
 }
