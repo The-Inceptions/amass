@@ -97,12 +97,19 @@ func (bu *bannerURLs) query(e *et.Event, asset *dbt.Entity) []*dbt.Entity {
 	}
 
 	var results []*oamurl.URL
+	// pages often repeat the same URL, so each one is only stored once
+	seen := make(map[string]struct{})
 	// TODO: in the future, further investigation of out of scope URLs may be needed
 	if urls := support.ExtractURLsFromString(serv.Output); len(urls) > 0 {
 		for _, u := range urls {
 			if u.Host == "" {
 				continue
-			} else if addr, err := netip.ParseAddr(u.Host); err == nil {
+			} else if _, found := seen[u.Raw]; found {
+				continue
+			}
+			seen[u.Raw] = struct{}{}
+
+			if addr, err := netip.ParseAddr(u.Host); err == nil {
 				if _, conf := e.Session.Scope().IsAssetInScope(&oamnet.IPAddress{Address: addr}, 0); conf > 0 {
 					results = append(results, u)
 				}
