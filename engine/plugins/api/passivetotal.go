@@ -105,14 +105,16 @@ func (pt *passiveTotal) query(e *et.Event, name string, ds *config.DataSource) [
 	names := support.NewFQDNFilter()
 	defer names.Close()
 
+	var pages int
 	var lastid string
 loop:
 	for _, cr := range ds.Creds {
-		for lastid != "" {
-			if cr == nil || cr.Username == "" || cr.Apikey == "" {
-				continue
-			}
+		if cr == nil || cr.Username == "" || cr.Apikey == "" {
+			continue
+		}
 
+		// a failed request moves on to the next credential, starting from the same page
+		for ; pages < 500; pages++ {
 			url := "https://api.riskiq.net/pt/v2/enrichment/subdomains?query=" + name
 			if lastid != "" {
 				url += "&lastId=" + lastid
@@ -122,8 +124,6 @@ loop:
 			e.Session.NetSem().Acquire()
 
 			ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
-			defer cancel()
-
 			resp, err := amasshttp.RequestWebPage(ctx, e.Session.Clients().General, &amasshttp.Request{
 				URL: url,
 				Auth: &amasshttp.BasicAuth{
@@ -131,9 +131,10 @@ loop:
 					Password: cr.Apikey,
 				},
 			})
+			cancel()
 			e.Session.NetSem().Release()
 			if err != nil || resp.Body == "" {
-				continue
+				break
 			}
 
 			var result struct {
@@ -153,10 +154,10 @@ loop:
 				}
 			}
 
-			lastid = result.LastID
-			if lastid == "" {
+			if result.LastID == "" || result.LastID == lastid {
 				break loop
 			}
+			lastid = result.LastID
 		}
 	}
 
