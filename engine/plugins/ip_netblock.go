@@ -218,7 +218,7 @@ func (d *ipNetblock) reservedAS(e *et.Event, netblock *oamnet.Netblock) {
 		return
 	}
 
-	_, _ = e.Session.DB().CreateEntityProperty(ctx, nb, &general.SourceProperty{
+	_, _ = e.Session.DB().CreateEntityProperty(ctx, asn, &general.SourceProperty{
 		Source:     d.source.Name,
 		Confidence: d.source.Confidence,
 	})
