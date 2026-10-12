@@ -111,23 +111,17 @@ func (r *autsys) store(e *et.Event, resp *rdap.Autnum, asset *dbt.Entity) *dbt.E
 		Status:      resp.Status,
 	}
 
-	var reg, last bool
 	for _, event := range resp.Events {
 		switch event.Action {
 		case "registration":
 			if t, err := time.Parse(time.RFC3339, event.Date); err == nil {
 				autrec.CreatedDate = support.TimeToJSONString(&t)
-				reg = true
 			}
 		case "last changed":
 			if t, err := time.Parse(time.RFC3339, event.Date); err == nil {
 				autrec.UpdatedDate = support.TimeToJSONString(&t)
-				last = true
 			}
 		}
-	}
-	if !reg || !last {
-		return nil
 	}
 
 	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)

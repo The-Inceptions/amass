@@ -109,11 +109,20 @@ func (nb *netblock) query(e *et.Event, asset *dbt.Entity) (*dbt.Entity, *rdap.IP
 
 func (nb *netblock) store(e *et.Event, resp *rdap.IPNetwork, asset *dbt.Entity) *dbt.Entity {
 	n := asset.Asset.(*network.Netblock)
+	start, err := netip.ParseAddr(resp.StartAddress)
+	if err != nil {
+		return nil
+	}
+	end, err := netip.ParseAddr(resp.EndAddress)
+	if err != nil {
+		return nil
+	}
+
 	ipnetrec := &oamreg.IPNetRecord{
 		CIDR:         n.CIDR,
 		Handle:       resp.Handle,
-		StartAddress: netip.MustParseAddr(resp.StartAddress),
-		EndAddress:   netip.MustParseAddr(resp.EndAddress),
+		StartAddress: start,
+		EndAddress:   end,
 		Type:         n.Type,
 		Name:         resp.Name,
 		Method:       resp.Type,
@@ -123,23 +132,17 @@ func (nb *netblock) store(e *et.Event, resp *rdap.IPNetwork, asset *dbt.Entity) 
 		Status:       resp.Status,
 	}
 
-	var reg, last bool
 	for _, event := range resp.Events {
 		switch event.Action {
 		case "registration":
 			if t, err := time.Parse(time.RFC3339, event.Date); err == nil {
 				ipnetrec.CreatedDate = support.TimeToJSONString(&t)
-				reg = true
 			}
 		case "last changed":
 			if t, err := time.Parse(time.RFC3339, event.Date); err == nil {
 				ipnetrec.UpdatedDate = support.TimeToJSONString(&t)
-				last = true
 			}
 		}
-	}
-	if !reg || !last {
-		return nil
 	}
 
 	ctx, cancel := context.WithTimeout(e.Session.Ctx(), 30*time.Second)
