@@ -17,6 +17,7 @@ import (
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
+	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 	oamcon "github.com/owasp-amass/open-asset-model/contact"
 	oamgen "github.com/owasp-amass/open-asset-model/general"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
@@ -509,4 +510,39 @@ func (h *horizPlugin) getRegisteredNetblockEntity(sess et.Session, record *dbt.E
 	}
 
 	return nil, fmt.Errorf("failed to obtain the registered CIDR Netblock for: %s", iprec.CIDR.String())
+}
+
+// expandScopeFromContactRecordOwners adds the registration records and TLS certificates
+// that the contact record belongs to, or what they register, to the session scope.
+func (h *horizPlugin) expandScopeFromContactRecordOwners(ctx context.Context, sess et.Session, cr *dbt.Entity, since time.Time) {
+	edges, err := sess.DB().IncomingEdges(ctx, cr, since)
+	if err != nil {
+		return
+	}
+
+	for _, edge := range edges {
+		from, err := sess.DB().FindEntityById(ctx, edge.FromEntity.ID)
+		if err != nil {
+			continue
+		}
+
+		switch v := from.Asset.(type) {
+		case *oamreg.AutnumRecord:
+			if !h.isEntityInScope(sess, from) {
+				if as := h.addASNetblocksToScope(sess, v.Number); as != nil {
+					h.addToScopeAndEnqueue(sess, as)
+				}
+			}
+		case *oamreg.DomainRecord:
+			if fqdn, err := h.getRegisteredDomainEntity(sess, from); err == nil && fqdn != nil {
+				h.enqueueIfOutOfScope(sess, fqdn)
+			}
+		case *oamreg.IPNetRecord:
+			if nb, err := h.getRegisteredNetblockEntity(sess, from); err == nil && nb != nil {
+				h.enqueueIfOutOfScope(sess, nb)
+			}
+		case *oamcert.TLSCertificate:
+			h.enqueueIfOutOfScope(sess, from)
+		}
+	}
 }
